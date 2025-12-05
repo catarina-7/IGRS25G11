@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+
+  db:
+    image: mariadb:10.6
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    ports:
+      - "3306:3306"
+
+  kamailio:
+    image: kamailio/kamailio:5.6
+    depends_on:
+      - db
+    volumes:
+      - ./kamailio/kamailio.cfg:/usr/local/etc/kamailio/kamailio.cfg:ro
+      - ./kamailio/kecmd_redial.py:/usr/local/etc/kamailio/kemi_scripts/kecmd_redial.py:ro
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASS=rootpass
+      - DB_NAME=redial
+    command: ["kamailio", "-DD", "-E"]
