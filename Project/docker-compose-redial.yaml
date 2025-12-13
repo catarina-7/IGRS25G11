@@ -1,0 +1,30 @@
+
+services:
+  kamailio_acme:
+    image: ghcr.io/kamailio/kamailio:6.0.3-focal
+    container_name: kamailio_acme
+    networks:
+      - sipnet
+    hostname: acme.operador
+    environment:
+      - SIP_DOMAIN=acme.operador
+      - WITH_DB=no
+    volumes:
+      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/redial-acme.py:/etc/kamailio/app.py:ro
+    restart: unless-stopped
+
+  terminals:
+    image: igrs_grlt:04
+    container_name: terminal
+    hostname: sipnet.terminal
+    networks:
+      - sipnet
+    ports:
+      - "5090:5090"
+    privileged: true
+    restart: unless-stopped
+
+networks:
+  sipnet:
+    driver: bridge
