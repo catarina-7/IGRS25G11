@@ -36,7 +36,7 @@ services:
     container_name: twinkle_bob
     networks:
       - sipnet
-    hostname: bob.acme.operador
+    hostname: bob.outro.operador
     environment:
       - DISPLAY=host.docker.internal:0
     entrypoint: ["sh", "/root/start.sh"]
