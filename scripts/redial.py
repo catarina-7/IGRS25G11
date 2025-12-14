@@ -1,6 +1,7 @@
 import KSR as KSR
 
 ACME_DOMAIN = "acme.operador"
+REDIAL_LISTA = {}
 
 # Mandatory function - module initiation
 def mod_init():
@@ -23,23 +24,27 @@ class kamailio:
         # REGISTER / DEREGISTER
         if msg.Method == "REGISTER":
             from_domain = KSR.pv.get("$fd")  # domínio do From-URI
-            KSR.info("REGISTER From domain: " + str(from_domain) + "\n")
-            KSR.info("REGISTER To: " + (KSR.pv.get("$tu") or "") +
-                     " Contact: " + (KSR.hdr.get("Contact") or "") + "\n")
+            from_uri = KSR.pv.get("$fu") or "" # AoR do From
+            to_uri = KSR.pv.get("$tu") or "" # AoR do To
+            
+            KSR.info("REGISTER From: " + str(from_uri) + "domain: " + str(from_domain) + "\n")
+            KSR.info("REGISTER To: " + (to_uri) +
+                     " Contact: " + (KSR.hdr.get("Contact") or "") + "\n") # Extrair AoR do pedido REGISTER (From/To)
 
-            # Rejeitar utilizadores fora do domínio ACME
+            # Rejeitar utilizadores fora do domínio ACME / Validar domínio do AoR
             if from_domain != ACME_DOMAIN:
                 KSR.info("REGISTER rejected (invalid domain)\n")
                 KSR.sl.send_reply(403, "Forbidden - Invalid Domain")
                 return 1
 
-            # Guardar (REGISTER ou deregister) no usrloc/location
+            # Atualizar estado de registo na BD (Guarda (REGISTER ou deregister) no usrloc/location)
+            # Responder SIP 200 OK com Contact e expires
             if KSR.registrar.save("location", 0) < 0:
                 KSR.err("Error saving registration\n")
                 KSR.sl.send_reply(500, "Server Error")
                 return 1
 
-            # O registrar/usrloc gera a resposta 200 OK
+            # O registrar gera a resposta 200 OK e inclui Contact e Expires
             return 1
 
         # Tudo o resto ainda não implementado no Sprint 1
