@@ -1,30 +1,57 @@
-
 services:
   kamailio_acme:
     image: ghcr.io/kamailio/kamailio:6.0.3-focal
     container_name: kamailio_acme
     networks:
-      - sipnet
-    hostname: acme.operador
+      sipnet:
+        aliases:
+          - acme.operador
     environment:
       - SIP_DOMAIN=acme.operador
       - WITH_DB=no
     volumes:
-      - ./scripts/app.cfg:/etc/kamailio/kamailio.cfg:ro
-      - ./scripts/redial-acme.py:/etc/kamailio/app.py:ro
+      - ./scripts_aux/app.cfg:/etc/kamailio/kamailio.cfg:ro
+      - ./scripts/redial.py:/etc/kamailio/redial.py:ro
     restart: unless-stopped
 
-  terminals:
-    image: igrs_grlt:04
-    container_name: terminal
-    hostname: sipnet.terminal
+  terminal_alice:
+    image: twinkle:igrs_01
+    container_name: twinkle_alice
     networks:
       - sipnet
-    ports:
-      - "5090:5090"
-    privileged: true
+    hostname: alice.acme.operador
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    volumes:
+      - ./scripts/Alice.cfg:/tmp/twinkle/Alice.cfg:ro
+      - ./scripts/twinkle_alice.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-alice:/root/.twinkle
+    restart: unless-stopped
+
+  terminal_bob:
+    image: twinkle:igrs_01
+    container_name: twinkle_bob
+    networks:
+      - sipnet
+    hostname: bob.acme.operador
+    environment:
+      - DISPLAY=host.docker.internal:0
+    entrypoint: ["sh", "/root/start.sh"]
+    volumes:
+      - ./scripts/Bob.cfg:/tmp/twinkle/Bob.cfg:ro
+      - ./scripts/twinkle_bob.sys:/tmp/twinkle/twinkle.sys:ro
+      - ./scripts_aux/.asoundrc:/root/.asoundrc:ro
+      - ./scripts_aux/start.sh:/root/start.sh:ro
+      - twinkle-bob:/root/.twinkle
     restart: unless-stopped
 
 networks:
   sipnet:
     driver: bridge
+
+volumes:
+  twinkle-alice:
+  twinkle-bob:
