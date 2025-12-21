@@ -4,7 +4,7 @@
 # Startup
 start_user_profile=Bob
 # Network
-sip_port=5080
+sip_port=5060
 rtp_port=8888
 
 #
