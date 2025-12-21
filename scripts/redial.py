@@ -6,25 +6,25 @@ HT_CALLS = "callstable"
 SEP_LIST = ";"
 SEP_COLS = "|"
 N = 5
-FAIL_CODES = {480, 486, 408}
+FAIL_CODES = {480, 486, 408} # 486 Busy/ 480 no answer / 408 Time out
 
 def write_value(active, list):
     return f"active={active}{SEP_COLS}list={list}"
 
 # Mandatory function - module initiation
 def mod_init():
-    KSR.info("===== Redial 2.0 Sprint 1: Python mod init\n")
+    KSR.info("===== Redial 2.0: Python mod init\n")
     return kamailio()
 
 class kamailio:
     # Mandatory function - Kamailio class initiation
     def __init__(self):
-        KSR.info('===== Redial 2.0 Sprint 1: kamailio.__init__\n')
+        KSR.info('===== Redial 2.0: kamailio.__init__\n')
         KSR.info(f"htable module: {dir(KSR.tm)}\n")
 
     # Mandatory function - Kamailio subprocesses
     def child_init(self, rank):
-        KSR.info('===== Redial 2.0 Sprint 1: kamailio.child_init(%d)\n' % rank)
+        KSR.info('===== Redial 2.0: kamailio.child_init(%d)\n' % rank)
         return 0
 
     # Function called for REQUEST messages received
@@ -38,12 +38,13 @@ class kamailio:
 
         if msg.Method == "INVITE":
             return self.handle_invite(msg)
+        
         if msg.Method in ("ACK", "BYE", "CANCEL"):
             KSR.tm.t_relay()
             return 1
 
         # Tudo o resto ainda não implementado no Sprint 1
-        KSR.sl.send_reply(403, "Forbidden method for Sprint 1")
+        KSR.sl.send_reply(403, "Forbidden method")
         return 1
     
     def handle_register(self, msg):
@@ -113,7 +114,7 @@ class kamailio:
 
         from_domain = KSR.pv.get("$fd") or ""  # domínio do From-URI
         from_uri = KSR.pv.get("$fu") or "" # AoR do From
-        ruri = KSR.pv.get("$ru") or ""
+        ruri = KSR.pv.get("$ru") or "" # AoR destino
         body = (KSR.pv.get("$rb") or "").strip()
 
         KSR.info(f"MESSAGE From: {from_uri} To: {ruri} Body: '{body}')\n")
@@ -138,18 +139,18 @@ class kamailio:
             return 1
         
         # Receber SIP MESSAGE para redial@acme.operador
-        parts = body.split()
-        command = parts[0].upper()
+        parts = body.split() # ACTIVATE user1 user2 parts=[ACTIVE, user1, user2]
+        command = parts[0].upper() # command=ACTIVE
 
         if command == "ACTIVATE":
-            dests = parts[1:]
-            if not dests:
+            dests = parts[1:] # dests=[user1, user2]
+            if not dests: # dests=[]
                 KSR.sl.send_reply(400, "No destinations provided")
                 KSR.info("MESSAGE No destinations provided\n")
                 return 1
             
-            # Validar formato AoRs; Remover destinos duplicados; Acrescentar novos destinos à lista de remarcação
-            new_list = SEP_LIST.join(dests)
+            # Acrescentar destinos à lista de remarcação
+            new_list = SEP_LIST.join(dests) # dests=[user1, user2] -> new_list=user1;user2
             new_value = write_value("1", new_list)
             
             KSR.info(f"MESSSAGE HTABLE ANTES: {KSR.htable.sht_get(HTABLE, from_uri)}\n")
@@ -163,13 +164,15 @@ class kamailio:
             KSR.sl.send_reply(200, "Redial 2.0 Activated")
             return 1
         
-        if command == "DEACTIVATE":
-            if parts[1:]:
+        if command == "DEACTIVATE": # parts=[DEACTIVATE]
+            if parts[1:]: # parts=[DEACTIVATE blabla]
                 KSR.info(f"Arguments passed in command\n")
                 KSR.sl.send_reply(400, "Arguments passed in command")
                 return 1
             
             new_value = write_value("0", "")
+            KSR.info(f"MESSSAGE HTABLE ANTES: {KSR.htable.sht_get(HTABLE, from_uri)}\n")
+
             KSR.htable.sht_sets(HTABLE, from_uri, new_value)
 
             KSR.info(f"DEACTIVATE HTABLE DEPOIS: {KSR.htable.sht_get(HTABLE, from_uri)}\n")
@@ -182,31 +185,34 @@ class kamailio:
     
     def handle_invite(self, msg):
         
-        from_domain = KSR.pv.get("$fd") or ""  # domínio do From-URI
         from_uri = KSR.pv.get("$fu") or "" # AoR do From
-        to_uri = KSR.pv.get("$tu") or ""
         ruri = str(KSR.pv.get("$ru")) or ""
         call_id = KSR.pv.get("$ci") or ""
 
         KSR.info(f"INVITE from: {from_uri} To: {ruri} Call-ID: {call_id}\n")
 
+        # ver se originador está registado
         reg = KSR.htable.sht_get(HTABLE, from_uri)
         if reg == None or reg == "":
             KSR.info(f"INVITE from: {from_uri} not registered\n")
+            KSR.sl.send_reply(403, "Not registered")
             return KSR.tm.t_relay()
         
-        parts = reg.split(SEP_COLS)
-        active = parts[0].split("=")[1]
-        list = parts[1].split("=")[1].split(SEP_LIST)
-        
-        if active != "1":
+        parts = reg.split(SEP_COLS) # parts=[active=1, list=user1;user2;user3]
+        active = parts[0].split("=")[1] # =[active=1] =[active, 1] parts=[1]
+        list = parts[1].split("=")[1].split(SEP_LIST) # list=[user1, user2, user3]
+
+        # Se serviço não ativo -> chamada normal
+        if active != "1": 
             KSR.info("INVITE Redial service not activated, normal call\n")
             return KSR.tm.t_relay()
         
+        # Se serviço ativo, mas destino não está na lista -> chamada normal
         if ruri.split("sip:")[1] not in list:
             KSR.info(f"INVITE Redial service active and destination not in redial list, normal call {ruri}\n")
             return KSR.tm.t_relay()
-            
+        
+        # Serviço ativo e está na lista
         if KSR.tm.t_newtran() < 0:
             KSR.sl.send_reply(500, "Server Error")
             return 1
